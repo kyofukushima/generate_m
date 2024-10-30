@@ -69,5 +69,6 @@ if st.button("ボタン"):
         # GIFを表示
         st.image(random_gif)
     with col2:
+        st.header("今日のひとこと", divider=True)
         # テキストを表示
         st.write(random_text)
