@@ -8,6 +8,16 @@ gifs = [
     "images/SPOILER_capcut_test.gif",
     "images/SPOILER_maeno_oogiri.gif"
 ]
+videos = [
+    'videos/gay_maeno.MP4',
+    'videos/jedi_maeno.MP4',
+    'videos/SPOILER_capcut_test.mov',
+    'videos/SPOILER_maeno_oogiri.mov',
+    'videos/muscle_maeno.mov',
+    'videos/spalta_maeno.mov',
+
+
+]
 
 texts = [
     """父が明日手術することになりました
@@ -58,16 +68,19 @@ AWSのクラウドが利用されています。
 
 # タイトルを設定
 st.title("押すと出る")
+st.write('最終更新 2024/11/05')
 
 # ボタンを作成
 if st.button("ボタン"):
     # ランダムにGIFとテキストを選択
-    random_gif = random.choice(gifs)
+    # random_gif = random.choice(gifs)
+    random_video = random.choice(videos)
     random_text = random.choice(texts)
     col1, col2 = st.columns(2)
     with col1:
         # GIFを表示
-        st.image(random_gif)
+        # st.image(random_gif)
+        st.video(random_video,autoplay=True,loop=True)
     with col2:
         st.header("今日のひとこと", divider=True)
         # テキストを表示
