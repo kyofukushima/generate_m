@@ -16,6 +16,7 @@ videos = [
     'videos/muscle_maeno.mov',
     'videos/spalta_maeno.mov',
     'videos/sw1.mp4',
+    'videos/mask_maeno.mp4',
 
 
 ]
