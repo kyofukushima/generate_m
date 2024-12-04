@@ -1,5 +1,6 @@
 import streamlit as st
 import random
+import os
 
 # GIFとテキストのリストを用意
 gifs = [
@@ -18,8 +19,8 @@ videos = [
     'videos/sw1.mp4',
     'videos/mask_maeno.mp4',
 
-
 ]
+videos = list(os.listdir('videos'))
 
 texts = [
     """父が明日手術することになりました
@@ -70,7 +71,7 @@ AWSのクラウドが利用されています。
 
 # タイトルを設定
 st.title("押すと出る")
-st.write('最終更新 2024/11/14')
+st.write('最終更新 2024/12/4')
 
 # ボタンを作成
 if st.button("ボタン"):
@@ -82,8 +83,13 @@ if st.button("ボタン"):
     with col1:
         # GIFを表示
         # st.image(random_gif)
-        st.video(random_video,autoplay=True,loop=True)
+        st.video(f'videos/{random_video}',autoplay=True,loop=True)
     with col2:
         st.header("今日のひとこと", divider=True)
         # テキストを表示
         st.write(random_text)
+
+manual_mode = st.toggle("任意の動画を再生する")
+if manual_mode:
+    selected_video = st.selectbox("リストから選択してください",videos,)
+    st.video(f'videos/{selected_video}')
