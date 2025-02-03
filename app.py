@@ -109,14 +109,30 @@ if gif_mode:
                     save_all=True, duration=image.info['duration'] // speed_factor, loop=0)
         return output.getvalue()
 
-    st.title('GIF再生速度調整')
+    # st.title('GIF再生速度調整')
 
     # uploaded_file = st.file_uploader("GIF画像をアップロードしてください", type="gif")
     uploaded_file = 'gifs/maeno_up.gif'
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
         
-        speed_factor = st.slider('再生速度', min_value=0.01, max_value=3.0, value=1.0, step=0.01)
+        # speed_factor = st.slider('再生速度', min_value=0.01, max_value=3.0, value=1.0, step=0.01)
         
-        modified_gif = change_gif_speed(image, speed_factor)
-        st.image(modified_gif)
+        # modified_gif = change_gif_speed(image, speed_factor)
+        @st.dialog(" ")
+        def vote():
+            container = st.container()
+            speed_factor = st.slider('再生速度', min_value=0.01, max_value=3.0, value=1.0, step=0.01)
+            modified_gif = change_gif_speed(image, speed_factor)
+            container.image(modified_gif)
+
+
+        if "vote" not in st.session_state:
+            # st.write("Vote for your favorite")
+            if st.button("表示する"):
+                vote()
+            # if st.button("B"):
+            #     vote("B")
+        # else:
+        #     f"You voted for {st.session_state.vote['item']} because {st.session_state.vote['reason']}"
+        # st.image(modified_gif)
