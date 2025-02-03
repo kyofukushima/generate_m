@@ -1,6 +1,8 @@
 import streamlit as st
 import random
 import os
+from PIL import Image
+import io
 
 # GIFとテキストのリストを用意
 gifs = [
@@ -71,7 +73,7 @@ AWSのクラウドが利用されています。
 
 # タイトルを設定
 st.title("押すと出る")
-st.write('最終更新 2025/1/29')
+st.write('最終更新 2025/2/03')
 
 # ボタンを作成
 if st.button("ボタン"):
@@ -93,3 +95,28 @@ manual_mode = st.toggle("任意の動画を再生する")
 if manual_mode:
     selected_video = st.selectbox("リストから選択してください",videos,)
     st.video(f'videos/{selected_video}')
+
+gif_mode = st.toggle("速度調整")
+if gif_mode:
+    def change_gif_speed(image, speed_factor):
+        frames = []
+        for frame in range(image.n_frames):
+            image.seek(frame)
+            frames.append(image.copy())
+        
+        output = io.BytesIO()
+        frames[0].save(output, format='GIF', append_images=frames[1:],
+                    save_all=True, duration=image.info['duration'] // speed_factor, loop=0)
+        return output.getvalue()
+
+    st.title('GIF再生速度調整')
+
+    # uploaded_file = st.file_uploader("GIF画像をアップロードしてください", type="gif")
+    uploaded_file = 'gifs/maeno_up.gif'
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        
+        speed_factor = st.slider('再生速度', min_value=0.01, max_value=3.0, value=1.0, step=0.01)
+        
+        modified_gif = change_gif_speed(image, speed_factor)
+        st.image(modified_gif)
