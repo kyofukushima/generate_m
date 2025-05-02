@@ -76,7 +76,7 @@ AWSのクラウドが利用されています。
 
 # ページ設定（他のStreamlit要素より先に実行する必要があります）
 st.set_page_config(
-    page_title="押すと出る",
+    page_title="まえのと",
     page_icon="🧑‍💼",
     layout="centered"
 )
@@ -272,6 +272,19 @@ def apply_avatar_css(size):
             align-self: flex-end;
             margin-left: auto;
         }}
+        
+        /* チャット関連のスタイル調整 */
+        section[data-testid="stSidebar"] > div {{
+            padding-bottom: 40px;
+        }}
+        
+        /* チャット入力フォームのスタイル */
+        .chat-input {{
+            padding: 10px 0;
+            background-color: white;
+            border-top: 1px solid #e6e6e6;
+            margin-top: 20px;
+        }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -378,7 +391,8 @@ with tab2:
     apply_avatar_css(AVATAR_SIZE)
     
     # タイトル
-    st.subheader("お手伝いできることはありますか？")
+    st.title(f"{AI_NAME}とチャット")
+    st.subheader("質問や相談に答えます")
     
     # サイドバーの設定
     with st.sidebar:
@@ -389,38 +403,47 @@ with tab2:
             st.session_state.messages = []
             st.rerun()
     
-    # 過去のメッセージを表示（常にカスタム表示を使用）
-    for message in st.session_state.messages:
-        if message["role"] == "assistant":
-            custom_chat_message(message["content"], is_user=False)
-        else:
-            custom_chat_message(message["content"], is_user=True)
+    # メッセージコンテナ
+    chat_container = st.container()
     
-    # ユーザー入力
-    if prompt := st.chat_input("質問してみましょう"):
+    # 過去のメッセージを表示
+    with chat_container:
+        for message in st.session_state.messages:
+            if message["role"] == "assistant":
+                custom_chat_message(message["content"], is_user=False)
+            else:
+                custom_chat_message(message["content"], is_user=True)
+    
+    # チャット入力エリア
+    st.markdown('<div class="chat-input">', unsafe_allow_html=True)
+    prompt = st.chat_input("メッセージを入力してください")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    if prompt:
         # ユーザーメッセージの追加
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # ユーザーのメッセージを表示
-        custom_chat_message(prompt, is_user=True)
-        
-        # システムプロンプトを含む全メッセージの準備
-        system_prompt = load_system_prompt()
-        messages = [
-            {"role": "system", "content": system_prompt}
-        ]
-        
-        # ユーザーとのやり取りをメッセージに追加
-        for message in st.session_state.messages:
-            messages.append(message)
-        
-        # ローディング表示
+        # ページを更新してユーザーメッセージを表示
+        st.rerun()
+    
+    # 最後のメッセージがユーザーのものなら応答を生成
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         with st.spinner("回答を生成中..."):
+            # システムプロンプトを含む全メッセージの準備
+            system_prompt = load_system_prompt()
+            messages = [
+                {"role": "system", "content": system_prompt}
+            ]
+            
+            # ユーザーとのやり取りをメッセージに追加
+            for message in st.session_state.messages:
+                messages.append(message)
+            
             # APIからの応答を取得
             response = get_perplexity_response(messages, DEFAULT_MODEL)
             
             # 応答をメッセージに追加
             st.session_state.messages.append({"role": "assistant", "content": response})
             
-            # AIの応答を表示
-            custom_chat_message(response, is_user=False)
+            # ページを更新して応答を表示
+            st.rerun()
