@@ -1,0 +1,18 @@
+# APIキーなどの機密情報
+.env
+.streamlit/secrets.toml
+
+# キャッシュファイル
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints
+
+# システムファイル
+.DS_Store
+Thumbs.db
+
+# 仮想環境
+venv/
+env/
+ENV/ 
