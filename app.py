@@ -7,6 +7,7 @@ import json
 import requests
 import base64
 import re
+import time
 
 # GIFとテキストのリストを用意
 gifs = [
@@ -200,6 +201,10 @@ def generate_speech(text):
         st.error("ElevenLabs APIキーが正しく設定されていません。")
         return None
     
+    # テキストが空の場合はスキップ
+    if not text or not text.strip():
+        return None
+    
     # テキストの前処理（長い文章の処理と最適化）
     processed_text = preprocess_text_for_tts(text)
     
@@ -215,48 +220,63 @@ def generate_speech(text):
         "xi-api-key": elevenlabs_api_key
     }
     
-    # 固定の声の高さと速度を使用
-    voice_pitch = 0.5  # 中間値（標準）
-    voice_speed = 1.0  # 標準速度
-    
-    # 声の高さを-100〜100の範囲に変換（スケーリング）
-    pitch_scale = 0  # 0%（標準ピッチ）
-    
-    # 言語設定
-    language = "ja"
-    
-    # ElevenLabsのAPIフォーマットに従ってJSONペイロードを構築
+    # より軽量なリクエストに設定
     payload = {
         "text": processed_text,
         "model_id": "eleven_multilingual_v2",
-        # 基本的な音声設定
         "voice_settings": {
-            "stability": 0.7,
-            "similarity_boost": 0.8
+            "stability": 0.5,
+            "similarity_boost": 0.75
         },
-        # 言語設定
-        "language": language,
-        # ストリーミングレイテンシの最適化レベル
-        "optimize_streaming_latency": 0,
-        # 出力形式（高品質MP3）
-        "output_format": "mp3_44100_128"
+        "language": "ja"
     }
     
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code == 200:
-            return response.content
-        else:
-            # エラーレスポンスの詳細を表示
-            st.error(f"音声生成エラー: {response.status_code}")
-            with st.expander("エラー詳細", expanded=False):
-                st.write(response.text)
-            return None
-    except Exception as e:
-        st.error(f"音声生成中にエラーが発生しました")
-        with st.expander("エラー詳細", expanded=False):
-            st.write(str(e))
-        return None
+    # リトライロジック（最大3回）
+    max_retries = 3
+    retry_delay = 1  # 秒
+    
+    for retry in range(max_retries):
+        try:
+            with st.spinner(f"音声を生成中... (試行 {retry+1}/{max_retries})"):
+                response = requests.post(url, json=payload, headers=headers, timeout=20)
+                
+                if response.status_code == 200:
+                    # 成功した場合、一時ファイルに音声データを保存
+                    audio_data = response.content
+                    
+                    # メモリ上のバイトデータを直接返す
+                    return audio_data
+                
+                elif response.status_code == 429:  # レート制限
+                    st.warning(f"ElevenLabs APIのレート制限に達しました。{retry_delay}秒後に再試行します...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # 指数バックオフ
+                    continue
+                    
+                else:
+                    st.error(f"音声生成エラー (HTTP {response.status_code})")
+                    if retry < max_retries - 1:
+                        st.warning(f"{retry_delay}秒後に再試行します...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # 指数バックオフ
+                    else:
+                        with st.expander("エラー詳細", expanded=False):
+                            st.write(response.text)
+                        return None
+                        
+        except requests.RequestException as e:
+            st.error(f"ネットワークエラー: {str(e)}")
+            if retry < max_retries - 1:
+                st.warning(f"{retry_delay}秒後に再試行します...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # 指数バックオフ
+            else:
+                with st.expander("エラー詳細", expanded=False):
+                    st.write(str(e))
+                return None
+    
+    # すべてのリトライが失敗
+    return None
 
 # テキストをTTS用に前処理する関数
 def preprocess_text_for_tts(text):
@@ -658,47 +678,8 @@ with tab2:
 
     # 前のレンダリングで生成された音声データを再生
     if st.session_state.enable_speech and "audio_data" in st.session_state:
-        # 音声データをBase64エンコードしてHTMLオーディオタグで自動再生
-        audio_base64 = base64.b64encode(st.session_state.audio_data).decode('utf-8')
-        
-        # JavaScriptを使用してユーザーインタラクションの後に音声を再生
-        audio_js = f"""
-        <script>
-            // Base64エンコードされた音声データ
-            const audioData = "{audio_base64}";
-            
-            // AudioContextを作成
-            const playAudio = () => {{
-                const audioEl = document.createElement('audio');
-                audioEl.src = "data:audio/mp3;base64," + audioData;
-                audioEl.style.display = 'none';
-                document.body.appendChild(audioEl);
-                audioEl.play()
-                    .then(() => console.log('音声再生開始'))
-                    .catch(err => console.error('音声再生エラー:', err));
-            }};
-            
-            // ページ読み込み完了時に再生
-            document.addEventListener('DOMContentLoaded', function() {{
-                playAudio();
-            }});
-            
-            // フォールバック：ユーザーインタラクション後に再生
-            if (document.readyState === 'complete') {{
-                playAudio();
-            }}
-        </script>
-        
-        <!-- 通常のaudioタグもバックアップとして配置 -->
-        <audio autoplay controls>
-            <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-            お使いのブラウザは音声再生をサポートしていません。
-        </audio>
-        """
-        st.markdown(audio_js, unsafe_allow_html=True)
-        
-        # 通常の音声プレーヤーも表示（コントロール用）
-        st.audio(st.session_state.audio_data, format="audio/mp3")
+        # シンプルにautoplayパラメーターをTrueにして音声を自動再生
+        st.audio(st.session_state.audio_data, format="audio/mp3", autoplay=True)
         
         # 一度再生したらセッションから削除
         del st.session_state.audio_data
