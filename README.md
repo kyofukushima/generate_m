@@ -6,6 +6,7 @@
 
 - **ボタン機能**: ランダムなビデオとテキストを表示します
 - **チャット機能**: Perplexity APIを使用して「まえの」とチャットができます
+- **音声読み上げ機能**: ElevenLabs APIを使用してチャット応答を音声で読み上げます
 
 ## セットアップ
 
@@ -23,6 +24,7 @@ pip install streamlit pillow requests
 ```toml
 [api_keys]
 perplexity = "あなたのPerplexity APIキーをここに入力"
+elevenlabs = "あなたのElevenLabs APIキーをここに入力"
 ```
 
 > **注意**: `secrets.toml`ファイルはGitなどのバージョン管理システムにコミットしないでください。
@@ -46,7 +48,9 @@ Streamlit Cloudにデプロイする場合は、以下の手順で行います�
 1. GitHubにリポジトリをプッシュします
 2. [Streamlit Cloud](https://streamlit.io/cloud)にアクセスしてサインインします
 3. 「New app」ボタンをクリックし、GitHubリポジトリを選択します
-4. APIキーなどの機密情報を「Secrets」セクションに設定します
+4. APIキーなどの機密情報を「Secrets」セクションに設定します：
+   - Perplexity APIキー
+   - ElevenLabs APIキー
 
 ## ディレクトリ構造
 

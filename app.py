@@ -6,6 +6,7 @@ import io
 import json
 import requests
 import base64
+import re
 
 # GIFとテキストのリストを用意
 gifs = [
@@ -108,6 +109,20 @@ def get_api_key():
         st.error("APIキーが設定されていません。.streamlit/secrets.tomlファイルに設定してください。")
         return None
 
+# ElevenLabsのAPIキーを取得する関数
+def get_elevenlabs_api_key():
+    try:
+        # Streamlitのsecrets機能からAPIキーを取得
+        api_key = st.secrets["api_keys"]["elevenlabs"]
+        # APIキーが空または「YOUR_」で始まる場合は未設定と判断
+        if not api_key or api_key.startswith("YOUR_"):
+            st.error("ElevenLabs APIキーが設定されていません。.streamlit/secrets.tomlファイルの[api_keys]セクションにelevenlabsキーを設定してください。")
+            return None
+        return api_key
+    except KeyError:
+        st.error("ElevenLabs APIキーが設定されていません。.streamlit/secrets.tomlファイルに設定してください。")
+        return None
+
 # システムプロンプトをJSONファイルから読み込む
 def load_system_prompt():
     try:
@@ -177,6 +192,177 @@ def get_perplexity_response(messages, model, temperature=0.7):
     except Exception as e:
         st.error(f"APIリクエストエラー: {str(e)}")
         return "すみません、回答の取得中にエラーが発生しました。"
+
+# ElevenLabsを使用して音声を生成する関数
+def generate_speech(text):
+    elevenlabs_api_key = get_elevenlabs_api_key()
+    if not elevenlabs_api_key or elevenlabs_api_key == "YOUR_ELEVENLABS_API_KEY":
+        st.error("ElevenLabs APIキーが正しく設定されていません。")
+        return None
+    
+    # テキストの前処理（長い文章の処理と最適化）
+    processed_text = preprocess_text_for_tts(text)
+    
+    # 固定のvoiceIDを使用
+    voice_id = "MlgbiBnm4o8N3DaDzblH"  # 日本語 男性 声
+    
+    # ElevenLabs Text-to-Speech APIエンドポイント
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    
+    headers = {
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+        "xi-api-key": elevenlabs_api_key
+    }
+    
+    # 固定の声の高さと速度を使用
+    voice_pitch = 0.5  # 中間値（標準）
+    voice_speed = 1.0  # 標準速度
+    
+    # 声の高さを-100〜100の範囲に変換（スケーリング）
+    pitch_scale = 0  # 0%（標準ピッチ）
+    
+    # 言語設定
+    language = "ja"
+    
+    # ElevenLabsのAPIフォーマットに従ってJSONペイロードを構築
+    payload = {
+        "text": processed_text,
+        "model_id": "eleven_multilingual_v2",
+        # 基本的な音声設定
+        "voice_settings": {
+            "stability": 0.7,
+            "similarity_boost": 0.8
+        },
+        # 言語設定
+        "language": language,
+        # ストリーミングレイテンシの最適化レベル
+        "optimize_streaming_latency": 0,
+        # 出力形式（高品質MP3）
+        "output_format": "mp3_44100_128"
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            return response.content
+        else:
+            # エラーレスポンスの詳細を表示
+            st.error(f"音声生成エラー: {response.status_code}")
+            with st.expander("エラー詳細", expanded=False):
+                st.write(response.text)
+            return None
+    except Exception as e:
+        st.error(f"音声生成中にエラーが発生しました")
+        with st.expander("エラー詳細", expanded=False):
+            st.write(str(e))
+        return None
+
+# テキストをTTS用に前処理する関数
+def preprocess_text_for_tts(text):
+    # 最大文字数（コスト削減のため）
+    MAX_CHARS = 500
+    
+    # 音声読み上げに適した形に整形
+    # 1. 括弧で囲まれた注釈文を削除（例: (注1) や （参照）など）
+    text = re.sub(r'[\(（].*?[\)）]', '', text)
+    
+    # 2. URL、メールアドレス、特殊記号などを削除または置換
+    text = re.sub(r'https?://\S+|www\.\S+', 'URL省略。', text)  # URLを短い表現に置き換え
+    text = re.sub(r'\S+@\S+', 'メールアドレス省略。', text)  # メールアドレスを置き換え
+    text = re.sub(r'[★☆■●◆◇□○※#＃\*\+]', '', text)  # 特殊記号を削除
+    
+    # 3. 日本語の読みにくい表現を置き換え
+    replacements = {
+        'AWS': 'エーダブリューエス',
+        'API': 'エーピーアイ',
+        'URL': 'ユーアールエル',
+        'AI': 'エーアイ',
+        'TTS': 'ティーティーエス',
+        'HTML': 'エイチティーエムエル',
+        'CSS': 'シーエスエス',
+        'JS': 'ジェイエス',
+        'vs': 'バーサス',
+        'etc': 'エトセトラ',
+        '&': 'アンド',
+        '/': 'スラッシュ',
+        '※': '',
+        '→': 'から',
+        '←': 'へ',
+        '〜': 'から',
+        '⇒': 'したがって',
+        '...': '、、、',
+        '…': '、、、',
+    }
+    
+    for original, replacement in replacements.items():
+        text = text.replace(original, replacement)
+    
+    # 4. 数字の表現を調整
+    # 電話番号のような形式をスキップする
+    text = re.sub(r'(\d{3,})', lambda m: ' '.join(m.group(1)) if len(m.group(1)) > 5 else m.group(1), text)
+    
+    # 5. 長い数字の羅列を簡略化
+    text = re.sub(r'\d{5,}', '数字省略', text)
+    
+    # 6. 繰り返される句読点を一つに
+    text = re.sub(r'、{2,}', '、', text)
+    text = re.sub(r'。{2,}', '。', text)
+    
+    # 7. 連続する改行を1つに
+    text = re.sub(r'\n{2,}', '\n', text)
+    
+    # 8. 長い文章は段落ごとに適切な間隔を入れる
+    paragraphs = text.split('\n')
+    processed_paragraphs = []
+    
+    for para in paragraphs:
+        if para.strip():  # 空でない段落のみ処理
+            # さらに文ごとに分割して処理
+            sentences = re.split(r'([。！？])', para)
+            processed_sentences = []
+            
+            for i in range(0, len(sentences), 2):
+                if i < len(sentences):
+                    sent = sentences[i]
+                    # 文末の記号を追加（分割時に取り除かれたもの）
+                    if i + 1 < len(sentences):
+                        sent += sentences[i + 1]
+                    
+                    # 長すぎる文は分割
+                    if len(sent) > 50:
+                        # 読点で分割
+                        subsents = re.split(r'(、)', sent)
+                        processed_subsent = ""
+                        
+                        for j in range(0, len(subsents), 2):
+                            if j < len(subsents):
+                                subsent = subsents[j]
+                                if j + 1 < len(subsents):
+                                    subsent += subsents[j + 1]
+                                processed_subsent += subsent
+                                
+                                # 適切な場所で区切りを入れる
+                                if j < len(subsents) - 2 and len(processed_subsent) > 30:
+                                    processed_subsent += " "  # 読点の後に小さな間を入れる
+                                    
+                        processed_sentences.append(processed_subsent)
+                    else:
+                        processed_sentences.append(sent)
+            
+            processed_para = "".join(processed_sentences)
+            processed_paragraphs.append(processed_para)
+    
+    processed_text = "\n".join(processed_paragraphs)
+    
+    # 最大文字数を超える場合は要約
+    if len(processed_text) > MAX_CHARS:
+        # 先頭と末尾の重要な部分を残す
+        beginning = processed_text[:MAX_CHARS // 2]
+        ending = processed_text[-MAX_CHARS // 2:] if len(processed_text) > MAX_CHARS else ""
+        processed_text = beginning + "..." + ending
+    
+    return processed_text
 
 # アバターサイズを適用するカスタムCSS
 def apply_avatar_css(size):
@@ -336,6 +522,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "ai_avatar" not in st.session_state:
     st.session_state.ai_avatar = DEFAULT_AI_AVATAR
+if "enable_speech" not in st.session_state:
+    st.session_state.enable_speech = False
 
 # メインコンテンツ
 # タブの設定
@@ -344,7 +532,7 @@ tab1, tab2 = st.tabs(["ボタン", "チャット"])
 with tab1:
     # タイトルを設定
     st.title("押すと出る")
-    st.write('最終更新 2025/5/2')
+    st.write('最終更新 2025/5/14')
 
     # ボタンを作成
     if st.button("ボタン"):
@@ -393,6 +581,18 @@ with tab2:
     # タイトル
     st.title(f"{AI_NAME}とチャット")
     st.subheader("質問や相談に答えます")
+    
+    # 音声読み上げオプション
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        st.session_state.enable_speech = st.checkbox("音声で読み上げる", value=st.session_state.enable_speech)
+    
+    # 音声読み上げが有効な場合のAPIキー確認
+    if st.session_state.enable_speech:
+        # APIキーの状態確認
+        elevenlabs_api_key = get_elevenlabs_api_key()
+        if not elevenlabs_api_key:
+            st.error("ElevenLabs APIキーが無効です")
     
     # サイドバーの設定
     with st.sidebar:
@@ -445,5 +645,60 @@ with tab2:
             # 応答をメッセージに追加
             st.session_state.messages.append({"role": "assistant", "content": response})
             
+            # 音声読み上げが有効な場合、音声を生成してセッションに保存
+            if st.session_state.enable_speech:
+                with st.spinner("音声を生成中..."):
+                    audio_data = generate_speech(response)
+                    if audio_data:
+                        # 音声データをセッションに保存
+                        st.session_state.audio_data = audio_data
+            
             # ページを更新して応答を表示
             st.rerun()
+
+    # 前のレンダリングで生成された音声データを再生
+    if st.session_state.enable_speech and "audio_data" in st.session_state:
+        # 音声データをBase64エンコードしてHTMLオーディオタグで自動再生
+        audio_base64 = base64.b64encode(st.session_state.audio_data).decode('utf-8')
+        
+        # JavaScriptを使用してユーザーインタラクションの後に音声を再生
+        audio_js = f"""
+        <script>
+            // Base64エンコードされた音声データ
+            const audioData = "{audio_base64}";
+            
+            // AudioContextを作成
+            const playAudio = () => {{
+                const audioEl = document.createElement('audio');
+                audioEl.src = "data:audio/mp3;base64," + audioData;
+                audioEl.style.display = 'none';
+                document.body.appendChild(audioEl);
+                audioEl.play()
+                    .then(() => console.log('音声再生開始'))
+                    .catch(err => console.error('音声再生エラー:', err));
+            }};
+            
+            // ページ読み込み完了時に再生
+            document.addEventListener('DOMContentLoaded', function() {{
+                playAudio();
+            }});
+            
+            // フォールバック：ユーザーインタラクション後に再生
+            if (document.readyState === 'complete') {{
+                playAudio();
+            }}
+        </script>
+        
+        <!-- 通常のaudioタグもバックアップとして配置 -->
+        <audio autoplay controls>
+            <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+            お使いのブラウザは音声再生をサポートしていません。
+        </audio>
+        """
+        st.markdown(audio_js, unsafe_allow_html=True)
+        
+        # 通常の音声プレーヤーも表示（コントロール用）
+        st.audio(st.session_state.audio_data, format="audio/mp3")
+        
+        # 一度再生したらセッションから削除
+        del st.session_state.audio_data
