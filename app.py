@@ -9,6 +9,21 @@ import base64
 import re
 import time
 
+# 動画情報を読み込む関数
+def load_videos():
+    try:
+        with open('videos.json', 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            # YOUR_VIDEO_IDの動画を除外
+            return [video for video in data["videos"] if video["id"] != "YOUR_VIDEO_ID"]
+    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+        st.error(f"動画情報の読み込みに失敗しました: {str(e)}")
+        return []
+
+# YouTube動画を表示する関数
+def display_youtube_video(video_id):
+    st.video(f"https://www.youtube.com/watch?v={video_id}")
+
 # GIFとテキストのリストを用意
 gifs = [
     "images/muscle_maeno.gif",
@@ -16,18 +31,9 @@ gifs = [
     "images/SPOILER_capcut_test.gif",
     "images/SPOILER_maeno_oogiri.gif"
 ]
-videos = [
-    'videos/gay_maeno.MP4',
-    'videos/jedi_maeno.MP4',
-    'videos/SPOILER_capcut_test.mov',
-    'videos/SPOILER_maeno_oogiri.mov',
-    'videos/muscle_maeno.mov',
-    'videos/spalta_maeno.mov',
-    'videos/sw1.mp4',
-    'videos/mask_maeno.mp4',
 
-]
-videos = list(os.listdir('videos'))
+# 動画情報を読み込む
+videos = load_videos()
 
 texts = [
     """父が明日手術することになりました
@@ -572,8 +578,15 @@ with tab1:
 
     manual_mode = st.toggle("任意の動画を再生する")
     if manual_mode:
-        selected_video = st.selectbox("リストから選択してください",videos,)
-        st.video(f'videos/{selected_video}')
+        selected_video = st.selectbox(
+            "リストから選択してください",
+            videos,
+            format_func=lambda x: x["title"]  # タイトルのみを表示
+        )
+        if selected_video:
+            video_id = selected_video["id"]
+            st.write(f"### {selected_video['title']}")
+            display_youtube_video(video_id)
 
     gif_mode = st.toggle("速度調整")
     if gif_mode:
