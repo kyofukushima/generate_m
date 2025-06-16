@@ -558,7 +558,7 @@ tab1, tab2 = st.tabs(["ボタン", "チャット"])
 with tab1:
     # タイトルを設定
     st.title("押すと出る")
-    st.write('最終更新 2025/5/14')
+    st.write('最終更新 2024/6/16')
 
     # ボタンを作成
     if st.button("ボタン"):
@@ -570,7 +570,7 @@ with tab1:
         with col1:
             # GIFを表示
             # st.image(random_gif)
-            st.video(f'videos/{random_video}',autoplay=True,loop=True)
+            st.video(f"https://www.youtube.com/watch?v={random_video['id']}")
         with col2:
             st.header("今日のひとこと", divider=True)
             # テキストを表示
