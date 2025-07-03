@@ -9,31 +9,135 @@ import base64
 import re
 import time
 
-# 動画情報を読み込む関数
-def load_videos():
+# スクリプト自身の場所を基準にパスを解決
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ページ設定（他のStreamlit要素より先に実行する必要があります）
+st.set_page_config(
+    page_title="まえのと",
+    page_icon="🧑‍💼",
+    layout="centered"
+)
+
+# YouTube動画の情報を読み込む関数（現在は未使用）
+def load_youtube_videos():
     try:
-        with open('videos.json', 'r', encoding='utf-8') as file:
+        videos_json_path = os.path.join(APP_DIR, 'videos.json')
+        with open(videos_json_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
             # YOUR_VIDEO_IDの動画を除外
             return [video for video in data["videos"] if video["id"] != "YOUR_VIDEO_ID"]
     except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
-        st.error(f"動画情報の読み込みに失敗しました: {str(e)}")
+        # st.set_page_config()の前に呼び出される可能性があるため、ここではst.errorを使用しない
+        print(f"[Warning] YouTube動画情報の読み込みに失敗しました: {str(e)}")
         return []
+
+# ローカルの動画ファイルを取得する関数
+def load_local_videos(video_dir="videos", max_size_mb=300):
+    video_path = os.path.join(APP_DIR, video_dir)
+    if not os.path.isdir(video_path):
+        return []
+    
+    video_files = []
+    skipped_files = []
+    
+    for f in os.listdir(video_path):
+        if f.endswith(('.mp4', '.mov')):
+            full_path = os.path.join(video_path, f)
+            try:
+                # ファイルサイズをチェック
+                file_size_mb = os.path.getsize(full_path) / (1024 * 1024)
+                if file_size_mb <= max_size_mb:
+                    video_files.append(full_path)
+                else:
+                    skipped_files.append((f, file_size_mb))
+            except OSError:
+                # ファイルが読み取れない場合はスキップ
+                continue
+    
+    # スキップしたファイルがある場合は警告を表示
+    if skipped_files:
+        print(f"[警告] 以下の動画ファイルはサイズが大きいためスキップされました:")
+        for filename, size in skipped_files:
+            print(f"  - {filename}: {size:.1f} MB")
+    
+    return video_files
 
 # YouTube動画を表示する関数
 def display_youtube_video(video_id):
     st.video(f"https://www.youtube.com/watch?v={video_id}")
 
+# ローカル動画を表示する関数
+def display_local_video(video_path):
+    try:
+        # ファイルの存在確認
+        if not os.path.exists(video_path):
+            st.error(f"動画ファイルが見つかりません: {video_path}")
+            return
+        
+        # ファイルサイズを確認
+        file_size = os.path.getsize(video_path)
+        st.info(f"動画ファイル: {os.path.basename(video_path)} (サイズ: {file_size / (1024*1024):.1f} MB)")
+        
+        # ファイルサイズが大きすぎる場合の警告
+        if file_size > 100 * 1024 * 1024:  # 100MB以上
+            st.warning("⚠️ 動画ファイルが大きいため、読み込みに時間がかかる場合があります。")
+        
+        # 方法1: バイト配列として読み込み
+        try:
+            with open(video_path, "rb") as video_file:
+                video_bytes = video_file.read()
+            st.video(video_bytes)
+            st.success("✅ 動画の読み込みが完了しました。")
+        except Exception as e1:
+            st.error(f"バイト配列での読み込みに失敗: {str(e1)}")
+            
+            # 方法2: ファイルパスを直接使用
+            try:
+                st.video(video_path)
+                st.success("✅ ファイルパスでの動画読み込みが完了しました。")
+            except Exception as e2:
+                st.error(f"ファイルパスでの読み込みも失敗: {str(e2)}")
+                
+                # 方法3: 相対パスを試す
+                try:
+                    relative_path = os.path.relpath(video_path, APP_DIR)
+                    st.video(relative_path)
+                    st.success("✅ 相対パスでの動画読み込みが完了しました。")
+                except Exception as e3:
+                    st.error(f"相対パスでの読み込みも失敗: {str(e3)}")
+                    st.error("すべての動画読み込み方法が失敗しました。ブラウザの開発者ツールでエラーを確認してください。")
+    
+    except Exception as general_error:
+        st.error(f"動画の表示中に予期しないエラーが発生しました: {str(general_error)}")
+        # デバッグ情報を表示
+        st.info(f"動画パス: {video_path}")
+        st.info(f"ファイル存在: {os.path.exists(video_path)}")
+        if os.path.exists(video_path):
+            st.info(f"ファイルサイズ: {os.path.getsize(video_path)} bytes")
+
 # GIFとテキストのリストを用意
 gifs = [
-    "images/muscle_maeno.gif",
-    "images/spalta_maeno.gif",
-    "images/SPOILER_capcut_test.gif",
-    "images/SPOILER_maeno_oogiri.gif"
+    os.path.join(APP_DIR, "images/muscle_maeno.gif"),
+    os.path.join(APP_DIR, "images/spalta_maeno.gif"),
+    os.path.join(APP_DIR, "images/SPOILER_capcut_test.gif"),
+    os.path.join(APP_DIR, "images/SPOILER_maeno_oogiri.gif")
 ]
 
 # 動画情報を読み込む
-videos = load_videos()
+try:
+    local_videos = load_local_videos()
+    print(f"[INFO] 読み込まれた動画ファイル数: {len(local_videos)}")
+    if local_videos:
+        print("[INFO] 利用可能な動画ファイル:")
+        for i, video in enumerate(local_videos, 1):
+            size_mb = os.path.getsize(video) / (1024 * 1024)
+            print(f"  {i}. {os.path.basename(video)} ({size_mb:.1f} MB)")
+    else:
+        print("[WARNING] 利用可能な動画ファイルがありません")
+except Exception as e:
+    print(f"[ERROR] 動画ファイルの読み込み中にエラーが発生しました: {e}")
+    local_videos = []
 
 texts = [
     """父が明日手術することになりました
@@ -54,7 +158,7 @@ AWSのクラウドが利用されています。
 レンダリング待ちが発生してしまったり、バックアップの管理が厳しいという課題が
 ありました。
 そこで、AWSのクラウドを導入したところ、レンダリング待ちがなくなったり、
-ストレージもいつでも拡張出来たり、バックアップも取得出来ったり、コンソール画面で
+ストレージもいつでも拡張出来たり、バックアップも取得出来たり、コンソール画面で
 簡単な操作で利用出来るようになり、クラウドに移行して良かったと満足しているみたいです。
 そんな観点で映画を観たいです。
 みんなで戸締まりして帰ります。""",
@@ -82,19 +186,12 @@ AWSのクラウドが利用されています。
 良いお年をお迎えください。"""
 ]
 
-# ページ設定（他のStreamlit要素より先に実行する必要があります）
-st.set_page_config(
-    page_title="まえのと",
-    page_icon="🧑‍💼",
-    layout="centered"
-)
-
 # アバター画像のディレクトリを作成（存在しない場合）
-os.makedirs("images", exist_ok=True)
+os.makedirs(os.path.join(APP_DIR, "images"), exist_ok=True)
 
 # チャット関連の定数定義
 DEFAULT_AI_AVATAR = None
-for img_path in ['images/ai_avatar.png', 'images/muscle_maeno.gif', 'images/spalta_maeno.gif']:
+for img_path in [os.path.join(APP_DIR, 'images/ai_avatar.png'), os.path.join(APP_DIR, 'images/muscle_maeno.gif'), os.path.join(APP_DIR, 'images/spalta_maeno.gif')]:
     if os.path.exists(img_path):
         DEFAULT_AI_AVATAR = img_path
         break
@@ -133,7 +230,8 @@ def get_elevenlabs_api_key():
 # システムプロンプトをJSONファイルから読み込む
 def load_system_prompt():
     try:
-        with open('system_prompt.json', 'r', encoding='utf-8') as file:
+        system_prompt_path = os.path.join(APP_DIR, 'system_prompt.json')
+        with open(system_prompt_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
             return data["prompt"]
     except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
@@ -148,7 +246,7 @@ def load_system_prompt():
 
 ## 性格とコミュニケーションスタイル
 - 自分の弱みを見せず、常に強がる傾向がある
-- 知識をひけらかしたがり、特にAWSなどのクラウド技術について詳しいアピールをする
+- 知識をひけらかしたがる、特にAWSなどのクラウド技術について詳しいアピールをする
 - 「〜と思っています」「〜だと思います」という表現を多用する
 - 文章の最後に唐突に「からこそ〜」「〜だからこそ」などと締めくくることがある
 - 会話中に自分の予定や経験を唐突に話し始めることがある
@@ -157,8 +255,9 @@ def load_system_prompt():
 - 時々「昨日は〜だった」「今日は〜」など日記のような話し方をする"""
         # システムプロンプトファイルを作成
         try:
-            os.makedirs(os.path.dirname('system_prompt.json'), exist_ok=True)
-            with open('system_prompt.json', 'w', encoding='utf-8') as file:
+            system_prompt_path = os.path.join(APP_DIR, 'system_prompt.json')
+            os.makedirs(os.path.dirname(system_prompt_path), exist_ok=True)
+            with open(system_prompt_path, 'w', encoding='utf-8') as file:
                 json.dump({"prompt": default_prompt}, file, ensure_ascii=False, indent=2)
         except Exception as write_error:
             st.error(f"システムプロンプトファイルの作成に失敗しました: {str(write_error)}")
@@ -562,36 +661,63 @@ with tab1:
 
     # ボタンを作成
     if st.button("ボタン"):
-        # ランダムにGIFとテキストを選択
-        # random_gif = random.choice(gifs)
-        random_video = random.choice(videos)
-        random_text = random.choice(texts)
-        col1, col2 = st.columns(2)
-        with col1:
-            # GIFを表示
-            # st.image(random_gif)
-            st.video(f"https://www.youtube.com/watch?v={random_video['id']}")
-        with col2:
-            st.header("今日のひとこと", divider=True)
-            # テキストを表示
-            st.write(random_text)
+        if local_videos:
+            random_video_path = random.choice(local_videos)
+            random_text = random.choice(texts)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**選択された動画:** {os.path.basename(random_video_path)}")
+                display_local_video(random_video_path)
+            with col2:
+                st.header("今日のひとこと", divider=True)
+                st.write(random_text)
+        else:
+            st.warning("videosフォルダに再生できる動画がありません。")
+            st.info(f"検索ディレクトリ: {os.path.join(APP_DIR, 'videos')}")
+            # デバッグ情報を表示
+            video_path = os.path.join(APP_DIR, "videos")
+            if os.path.exists(video_path):
+                files = os.listdir(video_path)
+                st.info(f"フォルダ内のファイル: {files}")
+            else:
+                st.error("videosフォルダが存在しません。")
 
     manual_mode = st.toggle("任意の動画を再生する")
     if manual_mode:
-        selected_video = st.selectbox(
-            "リストから選択してください",
-            videos,
-            format_func=lambda x: x["title"]  # タイトルのみを表示
-        )
-        if selected_video:
-            video_id = selected_video["id"]
-            st.write(f"### {selected_video['title']}")
-            display_youtube_video(video_id)
+        if local_videos:
+            # ファイル名とサイズを表示する関数
+            def format_video_option(video_path):
+                filename = os.path.basename(video_path)
+                try:
+                    size_mb = os.path.getsize(video_path) / (1024 * 1024)
+                    return f"{filename} ({size_mb:.1f} MB)"
+                except:
+                    return filename
+            
+            selected_video_path = st.selectbox(
+                "リストから選択してください",
+                local_videos,
+                format_func=format_video_option
+            )
+            if selected_video_path:
+                st.write(f"### {os.path.basename(selected_video_path)}")
+                display_local_video(selected_video_path)
+        else:
+            st.warning("videosフォルダに再生できる動画がありません。")
+            st.info(f"検索ディレクトリ: {os.path.join(APP_DIR, 'videos')}")
+            # デバッグ情報を表示
+            video_path = os.path.join(APP_DIR, "videos")
+            if os.path.exists(video_path):
+                files = [f for f in os.listdir(video_path) if f.endswith(('.mp4', '.mov'))]
+                st.info(f"動画ファイル: {files}")
+            else:
+                st.error("videosフォルダが存在しません。")
+
 
     gif_mode = st.toggle("速度調整")
     if gif_mode:
         # uploaded_file = st.file_uploader("GIF画像をアップロードしてください", type="gif")
-        uploaded_file = 'gifs/maeno_up.gif'
+        uploaded_file = os.path.join(APP_DIR, 'gifs/maeno_up.gif')
         if uploaded_file is not None:
             image = Image.open(uploaded_file)
             
